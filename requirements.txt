@@ -1,0 +1,14 @@
+torch>=2.1
+transformers>=4.36
+pillow>=10.0
+magic-pdf>=0.7
+pymupdf>=1.23
+paddleocr>=2.7
+confluent-kafka>=2.3
+sqlalchemy>=2.0
+pymilvus>=2.4
+openai-agents>=0.8
+fastapi>=0.108
+uvicorn[standard]>=0.25
+pyyaml>=6.0
+pydantic-settings>=2.0
