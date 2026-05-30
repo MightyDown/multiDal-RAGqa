@@ -22,3 +22,4 @@ class EmbeddedChunk(BaseModel):
     doc_id: str = Field(...)
     page: int = Field(..., ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    image_path: str | None = Field(default=None, description="图片原始路径，仅 image modality 有值")

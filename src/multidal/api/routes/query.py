@@ -107,6 +107,7 @@ async def _retrieve(req: QueryRequest) -> tuple[list, str, list[dict]]:
             "page": r.page,
             "score": r.score,
             "modality": r.modality,
+            "image_path": r.image_path,
             "content": r.content[:500],
         }
         for r in ranked

@@ -21,6 +21,10 @@
       <div style="margin-bottom:8px;display:flex;gap:8px">
         <span class="tag tag-moss">p{{ selectedSrc.page }}</span>
         <span class="tag tag-teal">相关度 {{ (selectedSrc.score * 100).toFixed(0) }}%</span>
+        <span v-if="selectedSrc.image_path" class="tag tag-clay">图片</span>
+      </div>
+      <div v-if="selectedSrc.image_path" class="detail-image-wrapper">
+        <img :src="imageUrl(selectedSrc.image_path)" :alt="'p' + selectedSrc.page" />
       </div>
       <div class="detail-content" v-html="renderDetail(selectedSrc.content)"></div>
     </div>
@@ -50,6 +54,11 @@ function showDetail(src) {
   } else {
     selectedSrc.value = src
   }
+}
+
+function imageUrl(imagePath) {
+  // image_path stored as docs/{task_id}/images/img_001.jpg -> /raw/{task_id}/images/img_001.jpg
+  return '/raw/' + imagePath.replace(/^docs\//, '')
 }
 
 function activateSources(sources) {
@@ -90,6 +99,22 @@ function renderDetail(text) {
 <style scoped>
 .chat-src-item.active {
   background: var(--stone);
+}
+.detail-image-wrapper {
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  max-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-root);
+}
+.detail-image-wrapper img {
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  display: block;
 }
 .detail-content :deep(img) {
   max-width: 100%;

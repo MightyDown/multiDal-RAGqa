@@ -115,6 +115,7 @@ class ImageEmbedder(Stage):
             kb_id=ctx.kb_id,
             doc_id=ctx.parsed.doc_id,
             page=img.page,
+            image_path=img.image_path,
         )
 
     @staticmethod

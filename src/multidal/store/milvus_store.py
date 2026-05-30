@@ -25,6 +25,7 @@ def _schema(dim: int) -> CollectionSchema:
             FieldSchema(name="kb_id", dtype=DataType.VARCHAR, max_length=64),
             FieldSchema(name="doc_id", dtype=DataType.VARCHAR, max_length=64),
             FieldSchema(name="page", dtype=DataType.INT64),
+            FieldSchema(name="image_path", dtype=DataType.VARCHAR, max_length=512, is_nullable=True),
             FieldSchema(name=_VECTOR, dtype=DataType.FLOAT_VECTOR, dim=dim),
         ]
     )
@@ -69,6 +70,7 @@ class MilvusStore(Stage, VectorStore):
                 "kb_id": c.kb_id,
                 "doc_id": c.doc_id,
                 "page": c.page,
+                "image_path": c.image_path or "",
                 _VECTOR: c.embedding.vector,
             }
             if c.modality == "text":
@@ -96,10 +98,11 @@ class MilvusStore(Stage, VectorStore):
             anns_field=_VECTOR,
             param={"metric_type": "IP", "params": {"nprobe": 10}},
             limit=top_k,
-            output_fields=["content", "modality", "kb_id", "doc_id", "page"],
+            output_fields=["content", "modality", "kb_id", "doc_id", "page", "image_path"],
         )
         out = []
         for hit in results[0]:
+            img_path = hit.entity.get("image_path", "")
             out.append(
                 RecallResult(
                     chunk_id=hit.id,
@@ -110,6 +113,7 @@ class MilvusStore(Stage, VectorStore):
                     kb_id=hit.entity.get("kb_id", ""),
                     doc_id=hit.entity.get("doc_id", ""),
                     page=hit.entity.get("page", 1),
+                    image_path=img_path if img_path else None,
                 )
             )
         return out
