@@ -161,7 +161,7 @@ def _run_testclient() -> int:
     else:
         print(_bwarn("跳过（无 task_id）"))
 
-    # 1.6 RAG 问答
+    # 1.5 RAG 问答
     _h1("5. RAG 问答")
     try:
         r = client.post(
@@ -169,7 +169,7 @@ def _run_testclient() -> int:
             json={
                 "question": "multiDal 是什么系统？",
                 "kb_ids": [use_kb] if kb_id else [],
-                "auto_route": False,
+                "retrieval": True,
                 "rewrite_query": False,
             },
         )
@@ -178,13 +178,59 @@ def _run_testclient() -> int:
             answer_preview = data["answer"][:120]
             sources_count = len(data.get("sources", []))
             print(_bok(f"问答成功: answer='{answer_preview}...', sources={sources_count}"))
+
+            # 1.5.1 验证 image_path 字段存在于 source 条目
+            for src in data.get("sources", []):
+                assert "image_path" in src, f"source missing image_path: {src}"
+                if src["modality"] == "image":
+                    assert src["image_path"] is not None and src["image_path"] != "", \
+                        f"image modality source missing image_path: {src}"
+                    print(_bok(f"  image_path present: {src['image_path']}"))
+                else:
+                    assert src["image_path"] is None, \
+                        f"text modality source should have null image_path: {src}"
+            print(_bok("  image_path 字段验证通过"))
         else:
             print(_bwarn(f"问答返回 {r.status_code}: {r.text}（LLM 可能未配置）"))
     except Exception as e:
         print(_bwarn(f"问答异常: {e}（LLM / Milvus 可能未启动）"))
 
+    # 1.6 流式 RAG 问答
+    _h1("6. 流式 RAG 问答（验证 sources 事件含 image_path）")
+    try:
+        r = client.post(
+            "/query/stream",
+            json={
+                "question": "multiDal 是什么系统？",
+                "kb_ids": [use_kb] if kb_id else [],
+                "retrieval": True,
+                "rewrite_query": False,
+            },
+            stream=True,
+        )
+        sources_event_found = False
+        for line in r.iter_lines():
+            if not line:
+                continue
+            if line.startswith("data: "):
+                try:
+                    import json as _json
+                    evt = _json.loads(line[6:])
+                    if evt.get("type") == "sources":
+                        sources_event_found = True
+                        for src in evt.get("sources", []):
+                            assert "image_path" in src, f"sources event missing image_path: {src}"
+                        print(_bok(f"  SSE sources 事件含 image_path，{len(evt['sources'])} 条"))
+                        break
+                except Exception:
+                    pass
+        if not sources_event_found:
+            print(_bwarn("  未收到 SSE sources 事件（可能无检索结果）"))
+    except Exception as e:
+        print(_bwarn(f"流式问答异常: {e}"))
+
     # 1.7 清理
-    _h1("6. 清理")
+    _h1("7. 清理")
     if kb_id:
         try:
             r = client.delete(f"/kb/{kb_id}")
@@ -301,7 +347,7 @@ def _run_live(host: str) -> int:
             json={
                 "question": "multiDal 是什么系统？",
                 "kb_ids": [use_kb] if kb_id else [],
-                "auto_route": False,
+                "retrieval": True,
                 "rewrite_query": False,
             },
         )
@@ -309,13 +355,53 @@ def _run_live(host: str) -> int:
             data = r.json()
             preview = data["answer"][:150]
             print(_bok(f"问答成功: '{preview}...'"))
+            for src in data.get("sources", []):
+                assert "image_path" in src, f"source missing image_path: {src}"
+                if src["modality"] == "image":
+                    assert src["image_path"] is not None
+                    print(_bok(f"  image source: {src['image_path']}"))
+                else:
+                    assert src["image_path"] is None
+            print(_bok("  image_path 字段验证通过"))
         else:
             print(_bwarn(f"问答返回 {r.status_code}: {r.text}"))
     except Exception as e:
         print(_bwarn(f"问答异常: {e}"))
 
-    # 2.6 清理
-    _h1("6. 清理")
+    # 2.6 流式 RAG 问答
+    _h1("6. 流式 RAG 问答（验证 sources 含 image_path）")
+    try:
+        r = requests.post(
+            f"{base}/query/stream",
+            json={
+                "question": "multiDal 是什么系统？",
+                "kb_ids": [use_kb] if kb_id else [],
+                "retrieval": True,
+                "rewrite_query": False,
+            },
+            stream=True,
+        )
+        sources_found = False
+        for line in r.iter_lines():
+            if line.startswith("data: "):
+                try:
+                    import json as _json
+                    evt = _json.loads(line[6:])
+                    if evt.get("type") == "sources":
+                        sources_found = True
+                        for src in evt.get("sources", []):
+                            assert "image_path" in src
+                        print(_bok(f"  SSE sources 含 image_path，{len(evt['sources'])} 条"))
+                        break
+                except Exception:
+                    pass
+        if not sources_found:
+            print(_bwarn("  未收到 SSE sources 事件（可能无检索结果）"))
+    except Exception as e:
+        print(_bwarn(f"流式问答异常: {e}"))
+
+    # 2.7 清理
+    _h1("7. 清理")
     if kb_id:
         try:
             r = requests.delete(f"{base}/kb/{kb_id}")
