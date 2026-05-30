@@ -66,6 +66,35 @@ class TestRecallResult:
             page=1,
         )
         assert rr.source == "dense_text"
+        assert rr.image_path is None
+
+    def test_with_image_path(self):
+        rr = RecallResult(
+            chunk_id="img1",
+            content="a chart showing growth",
+            modality="image",
+            source="dense_image",
+            score=0.85,
+            kb_id="kb1",
+            doc_id="d1",
+            page=3,
+            image_path="docs/task123/images/img_001.jpg",
+        )
+        assert rr.modality == "image"
+        assert rr.image_path == "docs/task123/images/img_001.jpg"
+
+    def test_image_path_null_for_text(self):
+        rr = RecallResult(
+            chunk_id="c1",
+            content="some text content",
+            modality="text",
+            source="dense_text",
+            score=0.7,
+            kb_id="kb1",
+            doc_id="d1",
+            page=2,
+        )
+        assert rr.image_path is None
 
 
 class TestRerankResult:

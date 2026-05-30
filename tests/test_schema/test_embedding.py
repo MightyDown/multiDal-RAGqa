@@ -50,3 +50,24 @@ class TestEmbeddedChunk:
             chunk_id="c1", content="x", embedding=emb, modality="text", kb_id="kb1", doc_id="d1", page=1
         )
         assert chunk.metadata == {}
+
+    def test_image_path_text_modality(self):
+        emb = Embedding(model_name="bge", dim=3, vector=[0.1, 0.2, 0.3])
+        chunk = EmbeddedChunk(
+            chunk_id="c1", content="text chunk", embedding=emb, modality="text", kb_id="kb1", doc_id="d1", page=1
+        )
+        assert chunk.image_path is None
+
+    def test_image_path_image_modality(self):
+        emb = Embedding(model_name="clip", dim=2, vector=[1.0, 2.0])
+        chunk = EmbeddedChunk(
+            chunk_id="img1",
+            content="loss curve chart",
+            embedding=emb,
+            modality="image",
+            kb_id="kb1",
+            doc_id="d1",
+            page=5,
+            image_path="docs/task_abc/images/img_042.jpg",
+        )
+        assert chunk.image_path == "docs/task_abc/images/img_042.jpg"
