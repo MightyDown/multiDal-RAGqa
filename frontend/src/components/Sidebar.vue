@@ -68,7 +68,7 @@ function logout() {
 
 async function check() {
   try {
-    const r = await fetch(API + '/openapi.json')
+    const r = await fetch(API + '/health')
     healthy.value = r.ok
   } catch {
     healthy.value = false

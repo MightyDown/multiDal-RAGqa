@@ -48,3 +48,4 @@ class RerankResult(BaseModel):
     kb_id: str = Field(...)
     doc_id: str = Field(...)
     page: int = Field(..., ge=1)
+    image_path: str | None = Field(default=None)

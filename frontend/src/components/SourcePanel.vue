@@ -23,10 +23,18 @@
         <span class="tag tag-teal">相关度 {{ (selectedSrc.score * 100).toFixed(0) }}%</span>
         <span v-if="selectedSrc.image_path" class="tag tag-clay">图片</span>
       </div>
-      <div v-if="selectedSrc.image_path" class="detail-image-wrapper">
+      <div v-if="selectedSrc.image_path" class="detail-image-wrapper" @click="showLightbox(imageUrl(selectedSrc.image_path))">
         <img :src="imageUrl(selectedSrc.image_path)" :alt="'p' + selectedSrc.page" />
       </div>
       <div class="detail-content" v-html="renderDetail(selectedSrc.content)"></div>
+    </div>
+
+    <!-- Lightbox: click to enlarge image -->
+    <div v-if="lightboxUrl" class="lightbox" @click.self="closeLightbox">
+      <div class="lightbox-inner">
+        <button class="lightbox-close" @click="closeLightbox">&times;</button>
+        <img :src="lightboxUrl" class="lightbox-img" />
+      </div>
     </div>
   </div>
 </template>
@@ -35,6 +43,9 @@
 import { ref, computed } from 'vue'
 import { marked } from 'marked'
 import katex from 'katex'
+import mermaid from 'mermaid'
+
+mermaid.initialize({ startOnLoad: false, theme: 'neutral' })
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -45,8 +56,17 @@ const emit = defineEmits(['close'])
 
 const selectedSrc = ref(null)
 const activeSources = ref(null)
+const lightboxUrl = ref(null)
 
 const displaySources = computed(() => activeSources.value || props.sources)
+
+function showLightbox(url) {
+  lightboxUrl.value = url
+}
+
+function closeLightbox() {
+  lightboxUrl.value = null
+}
 
 function showDetail(src) {
   if (selectedSrc.value === src) {
@@ -57,8 +77,9 @@ function showDetail(src) {
 }
 
 function imageUrl(imagePath) {
-  // image_path stored as docs/{task_id}/images/img_001.jpg -> /raw/{task_id}/images/img_001.jpg
-  return '/raw/' + imagePath.replace(/^docs\//, '')
+  // image_path stored as /app/docs/{task_id}/images/... -> /raw/{task_id}/images/...
+  const stripped = imagePath.replace(/^\/app\/docs\//, '')
+  return '/raw/' + stripped
 }
 
 function activateSources(sources) {
@@ -92,6 +113,18 @@ function renderDetail(text) {
   html = html.replace(/@@MINLINE(\d+)@@/g, (_, i) => {
     try { return katex.renderToString(mathBlocks[+i].tex, { displayMode: false, throwOnError: false }) } catch { return mathBlocks[+i].tex }
   })
+  // mermaid: render code blocks that look like mermaid diagrams
+  html = html.replace(/<pre><code(?: class="language-mermaid")?>([\s\S]*?)<\/code><\/pre>/g, (_, code) => {
+    const trimmed = code.trim()
+    if (!trimmed) return ''
+    const id = 'mermaid-' + Math.random().toString(36).slice(2, 9)
+    try {
+      const svg = mermaid.render(id, trimmed)
+      return `<div class="mermaid-diagram">${svg}</div>`
+    } catch (e) {
+      return `<pre class="mermaid-error">${trimmed}</pre>`
+    }
+  })
   return html
 }
 </script>
@@ -109,6 +142,7 @@ function renderDetail(text) {
   align-items: center;
   justify-content: center;
   background: var(--bg-root);
+  cursor: zoom-in;
 }
 .detail-image-wrapper img {
   max-width: 100%;
@@ -124,5 +158,53 @@ function renderDetail(text) {
 .detail-content :deep(.katex-display) {
   margin: 12px 0;
   overflow-x: auto;
+}
+.detail-content :deep(.mermaid-diagram) {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.detail-content :deep(.mermaid-diagram svg) {
+  max-width: 100%;
+  height: auto;
+}
+.detail-content :deep(.mermaid-error) {
+  background: var(--stone);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-error);
+}
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.lightbox-inner {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+.lightbox-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 2rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.lightbox-img {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  display: block;
 }
 </style>
