@@ -103,13 +103,16 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, watch } from 'vue'
 import { api } from '../api.js'
 import { marked } from 'marked'
 import katex from 'katex'
+import mermaid from 'mermaid'
 import ChatMessage from '../components/ChatMessage.vue'
 import SourcePanel from '../components/SourcePanel.vue'
 import SessionChips from '../components/SessionChips.vue'
+
+mermaid.initialize({ startOnLoad: false, theme: 'neutral' })
 
 // KB selector
 const kbs = ref([])
@@ -132,6 +135,25 @@ const showSources = ref(false)
 const chatMessages = ref(null)
 const stopController = ref(null)
 const sourcePanelRef = ref(null)
+
+// Watch streamHtml changes to trigger mermaid rendering
+// Handles streaming: multiple markdown fragments processed incrementally
+// style/classDef/click lines may be split across fragments — merge them
+watch(streamHtml, () => {
+  nextTick(() => {
+    document.querySelectorAll('.ai-content .mermaid:not([data-processed])').forEach(el => {
+      const raw = el.textContent || ''
+      // Merge lines that start with style/classDef/click into previous line
+      // Also handles lines that start with spaces+style (streaming split)
+      const merged = raw
+        .replace(/\n\s+(style|classDef|click)/g, '\n    $1')
+        .replace(/([\]\)])\n\s+(style|classDef|click)/g, '$1\n    $2')
+      el.textContent = merged
+      el.setAttribute('data-processed', 'true')
+      mermaid.run({ nodes: [el] }).catch(() => {})
+    })
+  })
+})
 
 // Session
 const SESSION_KEY = 'multidal_chat_session_id'
@@ -240,6 +262,28 @@ function renderMarkdown(text) {
   })
   html = html.replace(/@@MINLINE(\d+)@@/g, (_, i) => {
     try { return katex.renderToString(mathBlocks[+i].tex, { displayMode: false, throwOnError: false }) } catch { return mathBlocks[+i].tex }
+  })
+  // mermaid: render code blocks that look like mermaid diagrams
+  // marked escapes > as &gt; inside code, so decode first
+  // Also handles indented code blocks (4-space indent → <pre><code> without class)
+  html = html.replace(/<pre><code(?: class="language-mermaid")?>([\s\S]*?)<\/code><\/pre>/gi, (_, code) => {
+    const trimmed = code.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim()
+    if (!trimmed) return ''
+    // Accept both fenced (```mermaid) and indented (4-space) mermaid
+    if (!code.includes('language-mermaid') && !/^flowchart|^graph|^pie|^sequence|^class|^state|^er|^gantt|^requirement/i.test(trimmed)) {
+      return `<pre><code>${trimmed}</code></pre>`
+    }
+    const id = 'mermaid-' + Math.random().toString(36).slice(2, 9)
+    return `<div class="mermaid" id="${id}">${trimmed}</div>`
+  })
+  // Also catch p-tagged mermaid (no blank line → single <p> block with all content)
+  html = html.replace(/<p>(flowchart[\s\S]*?)<\/p>/gi, (_, content) => {
+    const trimmed = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim()
+    if (!/^flowchart|^graph|^pie|^sequence|^class|^state|^er|^gantt|^requirement/i.test(trimmed)) {
+      return `<p>${content}</p>`
+    }
+    const id = 'mermaid-' + Math.random().toString(36).slice(2, 9)
+    return `<div class="mermaid" id="${id}">${trimmed}</div>`
   })
   return html
 }
@@ -377,5 +421,20 @@ onMounted(() => {
 .sources-trigger:hover {
   opacity: 1;
   color: var(--accent-primary);
+}
+.ai-content :deep(.mermaid-diagram) {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.ai-content :deep(.mermaid-diagram svg) {
+  max-width: 100%;
+  height: auto;
+}
+.ai-content :deep(.mermaid-error) {
+  background: var(--stone);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-error);
 }
 </style>
