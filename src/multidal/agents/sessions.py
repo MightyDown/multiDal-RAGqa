@@ -133,9 +133,10 @@ def get_session_sources(session_id: str) -> dict[int, list]:
     """, (session_id,)).fetchall()
     conn.close()
     # 按行号作为 index（与 messages 列表顺序一致）
-    for i, row in enumerate(rows):
+    # 注意：query 过滤了 non-empty sources，所以 row['id'] 就是 assistant 消息的真实序号
+    for row in rows:
         try:
-            result[i] = json.loads(row["sources"])
+            result[row["id"] - 1] = json.loads(row["sources"])
         except Exception:
             pass
     return result
