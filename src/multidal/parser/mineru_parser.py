@@ -232,7 +232,6 @@ class MinerUParser(Stage):
         # 提取图片（扩大 block type 覆盖范围，覆盖 figure_image/chart/illustration 等）
         IMAGE_TYPES = {"image", "figure", "figure_image", "chart", "illustration", "inline_image", "page_image"}
         images: list[ImageRegion] = []
-        _used_img_files: set[str] = set()  # 记录已通过 block 匹配到的图片文件名
         _img_idx = 0  # 顺序匹配计数器，用于 block 没有明确路径时兜底
         for block in blocks:
             if block.get("type") in IMAGE_TYPES:
@@ -242,10 +241,8 @@ class MinerUParser(Stage):
                 disk_path = ""
                 if img_name and _img_dir and (_img_dir / img_name).exists():
                     disk_path = str(_img_dir / img_name)
-                    _used_img_files.add(img_name)
                 elif _img_idx < len(_extracted_images):
                     disk_path = str(_img_dir / _extracted_images[_img_idx])
-                    _used_img_files.add(_extracted_images[_img_idx])
 
                 _img_idx += 1
 
@@ -262,13 +259,21 @@ class MinerUParser(Stage):
                 )
 
         # 兜底：把所有已提取但未被任何 block 匹配到的图片文件也入索引
-        if _img_dir and _img_dir.exists():
-            for img_name in _extracted_images:
-                if img_name not in _used_img_files:
+        # 逻辑：images 列表里的 image_path 与 _extracted_images 比对
+        _indexed_paths = {img.image_path.split("/")[-1] for img in images if img.image_path}
+        if _img_dir and _img_dir.exists() and _extracted_images:
+            unmatched = [f for f in _extracted_images if f not in _indexed_paths]
+            if unmatched:
+                logger.warning(
+                    "MinerU: %d/%d image files unmatched by any block type, adding via fallback",
+                    len(unmatched),
+                    len(_extracted_images),
+                )
+                for img_name in unmatched:
                     images.append(
                         ImageRegion(
                             image_id=uuid.uuid4().hex[:8],
-                            page=0,  # 未知页，通过 caption 或文件名可追溯
+                            page=0,
                             caption=f"image file: {img_name}",
                             label="unmatched",
                             width=0,
@@ -276,12 +281,6 @@ class MinerUParser(Stage):
                             image_path=str(_img_dir / img_name),
                         )
                     )
-            if _extracted_images and len(_extracted_images) != len(_used_img_files):
-                logger.warning(
-                    "MinerU: %d/%d image files unmatched by any block type, added via fallback",
-                    len(_extracted_images) - len(_used_img_files),
-                    len(_extracted_images),
-                )
 
         # 提取表格
         tables: list[TableChunk] = []
