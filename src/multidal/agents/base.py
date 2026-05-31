@@ -54,7 +54,7 @@ def _get_small_chat_model() -> OpenAIChatCompletionsModel:
     return _small_model
 
 
-def _get_small_agent(name: str, instructions: str) -> Agent:
+def _get_small_agent(name: str, instructions: str, tools: list | None = None) -> Agent:
     """小模型 Agent，自动禁用思考过程。"""
     model = _get_small_chat_model()
     return Agent(
@@ -62,6 +62,7 @@ def _get_small_agent(name: str, instructions: str) -> Agent:
         model=model,
         model_settings=ModelSettings(extra_body={"enable_thinking": False}),
         instructions=instructions,
+        tools=tools or [],
     )
 
 
