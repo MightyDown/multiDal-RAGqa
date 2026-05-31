@@ -47,6 +47,12 @@ def create_task(
     return task
 
 
+def get_doc(doc_id: str) -> ParseTaskModel | None:
+    """根据 doc_id（task_id）查询文档信息。"""
+    with SessionLocal() as s:
+        return s.query(ParseTaskModel).filter(ParseTaskModel.task_id == doc_id).first()
+
+
 def get_task(task_id: str) -> ParseTaskModel | None:
     with SessionLocal() as s:
         return s.query(ParseTaskModel).filter(ParseTaskModel.task_id == task_id).first()

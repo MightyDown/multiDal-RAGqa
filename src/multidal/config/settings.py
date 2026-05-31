@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     llm_base_url: str = Field(default=_cfg.get("llm", {}).get("base_url", ""))
     llm_model: str = Field(default=_cfg.get("llm", {}).get("model", ""))
 
+    # ── Small LLM ──────────────────────────────────────────
+    small_llm_model: str = Field(default=_cfg.get("small_llm", {}).get("model", ""))
+
     # ── Logging ───────────────────────────────────────────
     log_level: str = Field(default=_cfg.get("log", {}).get("level", "INFO"))
 

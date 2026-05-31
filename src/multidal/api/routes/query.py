@@ -128,8 +128,10 @@ async def query_stream(req: QueryRequest):
 
         agent = QueryAgent()
         session = get_session(req.session_id) if req.session_id else None
+        fullAnswer = ""
         try:
             async for delta in agent.run_streamed(req.question, context, session=session):
+                fullAnswer += delta
                 yield f"data: {json.dumps({'type': 'delta', 'content': delta}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
@@ -139,15 +141,12 @@ async def query_stream(req: QueryRequest):
 
         yield "data: {\"type\":\"done\"}\n\n"
 
-        # 自动命名：首个问题完成后用 LLM 生成会话名
-        if req.session_id and _need_name:
+        # 自动命名：首个问题完成后用小模型生成会话名
+        if req.session_id and _need_name and fullAnswer:
             try:
-                sessions = list_sessions()
-                current = next((s for s in sessions if s["session_id"] == req.session_id), None)
-                if current and not (current.get("session_name") or "").strip():
-                    name = await generate_session_name(req.question)
-                    if name:
-                        set_session_name(req.session_id, name)
+                name = await generate_session_name(req.question, fullAnswer)
+                if name:
+                    set_session_name(req.session_id, name)
             except Exception:
                 pass
 
