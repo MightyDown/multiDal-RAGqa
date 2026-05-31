@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     reranker_model: str = Field(default=_cfg.get("reranker", {}).get("model", ""))
     reranker_api_key: str = Field(default=_cfg.get("reranker", {}).get("api_key", ""))
 
+    # ── VL Caption ────────────────────────────────────────
+    vl_caption_name: str = Field(default=_cfg.get("vl_caption", {}).get("name", ""))
+    vl_caption_api_base: str = Field(default=_cfg.get("vl_caption", {}).get("api_base", ""))
+    vl_caption_api_key: str = Field(default=_cfg.get("vl_caption", {}).get("api_key", ""))
+    vl_caption_model: str = Field(default=_cfg.get("vl_caption", {}).get("model", ""))
+
     # ── LLM ───────────────────────────────────────────────
     llm_api_key: str = Field(default=_cfg.get("llm", {}).get("api_key", ""))
     llm_base_url: str = Field(default=_cfg.get("llm", {}).get("base_url", ""))

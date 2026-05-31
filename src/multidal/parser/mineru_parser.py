@@ -273,7 +273,7 @@ class MinerUParser(Stage):
                     images.append(
                         ImageRegion(
                             image_id=uuid.uuid4().hex[:8],
-                            page=0,
+                            page=1,
                             caption=f"image file: {img_name}",
                             label="unmatched",
                             width=0,

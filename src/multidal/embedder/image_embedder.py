@@ -21,15 +21,18 @@ JPEG_QUALITY = 30
 
 class ImageEmbedder(Stage):
     """CLIP 双路向量化：图片像素走 image encoder，描述文字走 text encoder，
-    两者都在 CLIP 共享空间中，存入 {kb}_image collection。"""
+    两者都在 CLIP 共享空间中，存入 {kb}_image collection。
+
+    可选：配合 VLCaptioner 为图片生成 VL 描述，显著提升图片检索质量。"""
 
     name = "embedder_image"
 
-    def __init__(self) -> None:
+    def __init__(self, vl_captioner=None) -> None:
         self._api_base = settings.image_embedding_api_base
         self._model = settings.image_embedding_model
         self._dim = settings.image_embedding_dim
         self._key = settings.image_embedding_api_key
+        self._vl_captioner = vl_captioner  # optional VLCaptioner for better captions
 
     # ── Stage 接口 ──────────────────────────────────────────
 
@@ -45,7 +48,7 @@ class ImageEmbedder(Stage):
 
         chunks: list[EmbeddedChunk] = []
         for img in ctx.parsed.images:
-            caption = img.caption or f"image page {img.page}"
+            caption = self._get_caption(img)
 
             # 路径1: 图片像素 → CLIP image encoder
             image_uri = self._load_image_uri(img.image_path)
@@ -62,6 +65,14 @@ class ImageEmbedder(Stage):
         ctx.embedded = (ctx.embedded or []) + chunks
         logger.info("Image embedder: %d vectors (%d images × 2 paths)", len(chunks), len(ctx.parsed.images))
         return ctx
+
+    def _get_caption(self, img) -> str:
+        """生成图片 caption：优先用 VL 模型，其次用 MinerU 原 caption。"""
+        if self._vl_captioner:
+            vl_cap = self._vl_captioner.caption_image(img.image_path)
+            if vl_cap:
+                return vl_cap
+        return img.caption or f"image page {img.page}"
 
     # ── 检索时调用 ──────────────────────────────────────────
 

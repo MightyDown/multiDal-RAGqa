@@ -78,9 +78,21 @@ def _build_orchestrator():
 
     stages = [MinerUParser(), TextEmbedder(), MilvusStore()]
 
-    # 可选：图片向量化（需 CUDA + Jina CLIP 模型）
+    # 可选：图片向量化（需 CUDA + Jina CLIP 模型）+ VL caption
     try:
+        from src.multidal.embedder.vl_captioner import VLCaptioner
+        vl_captioner = VLCaptioner()
+        if vl_captioner.validate():
+            img_embedder = ImageEmbedder(vl_captioner=vl_captioner)
+            logger.info("VL captioner enabled")
+        else:
+            img_embedder = ImageEmbedder()
+            logger.warning("VL captioner not available, falling back to MinerU captions")
+    except Exception:
         img_embedder = ImageEmbedder()
+        logger.warning("VL captioner init failed, using MinerU captions")
+
+    try:
         if img_embedder.validate():
             stages.insert(2, img_embedder)
             logger.info("Image embedder enabled")
