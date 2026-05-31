@@ -55,6 +55,8 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    volumes:
+      - zk_data:/var/lib/zookeeper/data
     networks:
       - multidal-net
 
@@ -71,6 +73,9 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_DIRS: /var/lib/kafka/logs
+    volumes:
+      - kafka_data:/var/lib/kafka
     networks:
       - multidal-net
 
@@ -138,6 +143,8 @@ volumes:
   docs_data:
   logs_data:
   session_data:
+  zk_data:
+  kafka_data:
 
 networks:
   multidal-net:
