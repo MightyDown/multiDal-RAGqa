@@ -3,21 +3,19 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Column, DateTime, Integer, String, Text, ForeignKey
-from sqlalchemy.orm import relationship, sessionmaker
-
-from agents import SQLiteSession
+from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy import text
 
 from src.multidal.config import settings
-from src.multidal.db.models import Base
+from src.multidal.db.models import Base, SessionLocal
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SESSIONS_TABLE = "agent_sessions"
 DEFAULT_MESSAGES_TABLE = "agent_messages"
-
-_db_path: str | None = None
 
 # session_id -> {msg_index: sources}
 _session_sources: dict[str, dict[int, list]] = {}
@@ -33,24 +31,15 @@ class SessionModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    messages = relationship("MessageModel", back_populates="session", cascade="all, delete-orphan")
-
 
 class MessageModel(Base):
     __tablename__ = DEFAULT_MESSAGES_TABLE
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(64), ForeignKey("agent_sessions.session_id", ondelete="CASCADE"), nullable=False)
-    message_data = Column(Text, nullable=False)
+    message_data = Column(LONGTEXT, nullable=False)
     sources = Column(Text, default="[]")
     created_at = Column(DateTime, default=datetime.utcnow)
-
-    session = relationship("SessionModel", back_populates="messages")
-
-
-def _get_session_local():
-    from src.multidal.db.models import SessionLocal
-    return SessionLocal()
 
 
 def _ensure_schema() -> None:
@@ -58,40 +47,101 @@ def _ensure_schema() -> None:
     Base.metadata.create_all(_engine)
 
 
-def get_session(session_id: str) -> SQLiteSession:
-    _ensure_schema()
-    return SQLiteSession(session_id, db_path=str(settings.project_root / "data" / "sessions.db"))
+class MySQLSession:
+    """MySQL-backed session for openai-agents SDK.
+
+    Implements the same interface as the SDK's SQLiteSession so that
+    QueryAgent can use it transparently for get_items / add_items.
+    """
+
+    def __init__(self, session_id: str) -> None:
+        self.session_id = session_id
+        self.db_path = str(settings.project_root / "data" / "sessions.db")
+        _ensure_schema()
+
+    async def get_items(self, limit: int | None = None) -> list[dict]:
+        with SessionLocal() as db:
+            q = db.query(MessageModel).filter(MessageModel.session_id == self.session_id).order_by(MessageModel.id.asc())
+            if limit is not None:
+                q = db.query(MessageModel).filter(MessageModel.session_id == self.session_id).order_by(MessageModel.id.desc()).limit(limit)
+                rows = list(reversed(q.all()))
+            else:
+                rows = q.all()
+            items = []
+            for row in rows:
+                try:
+                    item = json.loads(row.message_data)
+                    item["_db_id"] = row.id
+                    items.append(item)
+                except Exception:
+                    pass
+            return items
+
+    async def add_items(self, items: list[dict]) -> None:
+        if not items:
+            return
+        with SessionLocal() as db:
+            # Ensure session row exists (upsert)
+            sess = db.get(SessionModel, self.session_id)
+            if not sess:
+                sess = SessionModel(session_id=self.session_id)
+                db.add(sess)
+                db.commit()
+                db.flush()
+            for item in items:
+                msg = MessageModel(session_id=self.session_id, message_data=json.dumps(item))
+                db.add(msg)
+            db.commit()
+
+    async def pop_item(self) -> dict | None:
+        with SessionLocal() as db:
+            row = db.query(MessageModel).filter(MessageModel.session_id == self.session_id).order_by(MessageModel.id.desc()).first()
+            if not row:
+                return None
+            try:
+                item = json.loads(row.message_data)
+            except Exception:
+                item = None
+            db.delete(row)
+            db.commit()
+            return item
+
+    async def clear_session(self) -> None:
+        with SessionLocal() as db:
+            db.query(MessageModel).filter(MessageModel.session_id == self.session_id).delete()
+            db.query(SessionModel).filter(SessionModel.session_id == self.session_id).delete()
+            db.commit()
+
+    def close(self) -> None:
+        pass
+
+
+def get_session(session_id: str) -> MySQLSession:
+    return MySQLSession(session_id)
 
 
 def set_session_name(session_id: str, name: str) -> None:
     _ensure_schema()
-    Session = _get_session_local()
-    with Session() as session:
-        sess = session.get(SessionModel, session_id)
+    with SessionLocal() as db:
+        sess = db.get(SessionModel, session_id)
         if sess:
             sess.session_name = name
             sess.updated_at = datetime.utcnow()
         else:
             sess = SessionModel(session_id=session_id, session_name=name)
-            session.add(sess)
-        session.commit()
+            db.add(sess)
+        db.commit()
 
 
 def _update_last_assistant_sources(session_id: str, sources: list) -> None:
-    Session = _get_session_local()
-    with Session() as session:
-        result = session.execute(
-            f"""SELECT id FROM {DEFAULT_MESSAGES_TABLE}
-                WHERE session_id = :sid AND JSON_EXTRACT(message_data, '$.role') = 'assistant'
-                ORDER BY id DESC LIMIT 1""",
-            {"sid": session_id}
-        )
-        row = result.fetchone()
+    with SessionLocal() as db:
+        row = db.query(MessageModel).filter(
+            MessageModel.session_id == session_id,
+            text(f"JSON_EXTRACT(message_data, '$.role') = 'assistant'")
+        ).order_by(MessageModel.id.desc()).first()
         if row:
-            msg = session.get(MessageModel, row[0])
-            if msg:
-                msg.sources = json.dumps(sources)
-                session.commit()
+            row.sources = json.dumps(sources)
+            db.commit()
 
 
 def set_session_sources(session_id: str, sources: list, msg_idx: int | None = None) -> None:
@@ -105,18 +155,18 @@ def set_session_sources(session_id: str, sources: list, msg_idx: int | None = No
 
 
 def get_session_sources(session_id: str) -> dict[int, list]:
+    """Returns {db_row_id: sources} mapping for messages with non-empty sources."""
     result = {}
-    Session = _get_session_local()
-    with Session() as session:
-        rows = session.execute(
-            f"""SELECT id, sources FROM {DEFAULT_MESSAGES_TABLE}
+    with SessionLocal() as db:
+        rows = db.execute(
+            text(f"""SELECT id, sources FROM {DEFAULT_MESSAGES_TABLE}
                 WHERE session_id = :sid AND sources IS NOT NULL AND sources != '[]' AND sources != ''
-                ORDER BY id ASC""",
+                ORDER BY id ASC"""),
             {"sid": session_id}
         ).fetchall()
     for row in rows:
         try:
-            result[row[0] - 1] = json.loads(row[1])
+            result[row[0]] = json.loads(row[1])
         except Exception:
             pass
     return result
@@ -124,13 +174,12 @@ def get_session_sources(session_id: str) -> dict[int, list]:
 
 def list_sessions() -> list[dict]:
     _ensure_schema()
-    Session = _get_session_local()
-    with Session() as session:
-        rows = session.execute(
-            f"""SELECT s.session_id, s.session_name, s.created_at, s.updated_at,
+    with SessionLocal() as db:
+        rows = db.execute(
+            text(f"""SELECT s.session_id, s.session_name, s.created_at, s.updated_at,
                        (SELECT COUNT(*) FROM {DEFAULT_MESSAGES_TABLE} m WHERE m.session_id = s.session_id) AS msg_count
                 FROM {DEFAULT_SESSIONS_TABLE} s
-                ORDER BY s.updated_at DESC"""
+                ORDER BY s.updated_at DESC""")
         ).fetchall()
     return [dict(r._mapping) for r in rows]
 
@@ -141,12 +190,11 @@ async def delete_session(session_id: str) -> None:
         await s.clear_session()
     except Exception:
         pass
-    Session = _get_session_local()
-    with Session() as session:
-        sess = session.get(SessionModel, session_id)
+    with SessionLocal() as db:
+        sess = db.get(SessionModel, session_id)
         if sess:
-            session.delete(sess)
-            session.commit()
+            db.delete(sess)
+            db.commit()
 
 
 async def generate_session_name(question: str) -> str:

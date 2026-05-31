@@ -46,6 +46,18 @@ services:
     networks:
       - multidal-net
 
+  # ── MySQL Database ──────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: multidal-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql
+      MYSQL_DATABASE: multidal
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - multidal-net
+
   # ── Kafka Message Queue ─────────────────────────────────
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -96,9 +108,15 @@ services:
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
       - DB_PATH=data/multidal.db
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=mysql
+      - MYSQL_DATABASE=multidal
     depends_on:
       - kafka
       - milvus
+      - mysql
     networks:
       - multidal-net
 
@@ -117,9 +135,15 @@ services:
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
       - DB_PATH=data/multidal.db
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=mysql
+      - MYSQL_DATABASE=multidal
     depends_on:
       - kafka
       - milvus
+      - mysql
     networks:
       - multidal-net
 
@@ -145,6 +169,7 @@ volumes:
   session_data:
   zk_data:
   kafka_data:
+  mysql_data:
 
 networks:
   multidal-net:

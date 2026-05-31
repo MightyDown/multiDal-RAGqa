@@ -27,10 +27,10 @@ async def get_session_messages(session_id: str):
     session = get_session(session_id)
     items = await session.get_items()
     sources_map = get_session_sources(session_id)
-    # Attach sources to each assistant message by index
-    for i, item in enumerate(items):
+    # Attach sources to each assistant message by DB row id
+    for item in items:
         if item.get("role") == "assistant":
-            item["sources"] = sources_map.get(i, [])
+            item["sources"] = sources_map.get(item.get("_db_id"), [])
     return {"messages": items}
 
 

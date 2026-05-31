@@ -263,27 +263,17 @@ function renderMarkdown(text) {
   html = html.replace(/@@MINLINE(\d+)@@/g, (_, i) => {
     try { return katex.renderToString(mathBlocks[+i].tex, { displayMode: false, throwOnError: false }) } catch { return mathBlocks[+i].tex }
   })
-  // mermaid: render code blocks that look like mermaid diagrams
-  // marked escapes > as &gt; inside code, so decode first
-  // Also handles indented code blocks (4-space indent → <pre><code> without class)
+  // mermaid: strip mermaid blocks entirely — show as plain pre block
   html = html.replace(/<pre><code(?: class="language-mermaid")?>([\s\S]*?)<\/code><\/pre>/gi, (_, code) => {
     const trimmed = code.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim()
-    if (!trimmed) return ''
-    // Accept both fenced (```mermaid) and indented (4-space) mermaid
-    if (!code.includes('language-mermaid') && !/^flowchart|^graph|^pie|^sequence|^class|^state|^er|^gantt|^requirement/i.test(trimmed)) {
-      return `<pre><code>${trimmed}</code></pre>`
-    }
-    const id = 'mermaid-' + Math.random().toString(36).slice(2, 9)
-    return `<div class="mermaid" id="${id}">${trimmed}</div>`
+    return `<pre><code>${trimmed}</code></pre>`
   })
-  // Also catch p-tagged mermaid (no blank line → single <p> block with all content)
   html = html.replace(/<p>(flowchart[\s\S]*?)<\/p>/gi, (_, content) => {
     const trimmed = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim()
-    if (!/^flowchart|^graph|^pie|^sequence|^class|^state|^er|^gantt|^requirement/i.test(trimmed)) {
-      return `<p>${content}</p>`
+    if (/^flowchart|^graph|^pie|^sequence|^class|^state|^er|^gantt|^requirement/i.test(trimmed)) {
+      return `<pre><code>${trimmed}</code></pre>`
     }
-    const id = 'mermaid-' + Math.random().toString(36).slice(2, 9)
-    return `<div class="mermaid" id="${id}">${trimmed}</div>`
+    return `<p>${content}</p>`
   })
   return html
 }

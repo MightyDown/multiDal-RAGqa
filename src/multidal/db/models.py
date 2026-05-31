@@ -2,13 +2,11 @@ from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Integer, String, Text, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.dialects.mysql import LONGTEXT
 
 from src.multidal.config import settings
 
 Base = declarative_base()
-
-# Import session models so they're registered on Base before create_all()
-from src.multidal.agents.sessions import SessionModel, MessageModel  # noqa: F401
 
 
 class ParseTaskModel(Base):
@@ -24,7 +22,7 @@ class ParseTaskModel(Base):
     status = Column(String(32), default="pending")
     stage = Column(String(64), nullable=True)
     error_message = Column(Text, default="")
-    full_text = Column(Text, default="")
+    full_text = Column(LONGTEXT, default="")
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)
 
@@ -53,4 +51,6 @@ SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
 
 
 def init_db() -> None:
+    # Import session models so they're registered on Base before create_all()
+    from src.multidal.agents.sessions import SessionModel, MessageModel  # noqa: F401
     Base.metadata.create_all(_engine)

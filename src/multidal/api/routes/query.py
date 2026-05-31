@@ -124,8 +124,6 @@ async def query_stream(req: QueryRequest):
     _need_name = bool(req.session_id)
 
     async def event_stream():
-        from src.multidal.agents.sessions import _session_next_idx
-        idx = _session_next_idx.get(req.session_id, 0) if req.session_id else 0
         yield f"data: {json.dumps({'type': 'sources', 'sources': sources}, ensure_ascii=False)}\n\n"
 
         agent = QueryAgent()
@@ -137,8 +135,7 @@ async def query_stream(req: QueryRequest):
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
 
         if req.session_id:
-            set_session_sources(req.session_id, sources, idx)
-            _session_next_idx[req.session_id] = idx + 2
+            set_session_sources(req.session_id, sources)
 
         yield "data: {\"type\":\"done\"}\n\n"
 

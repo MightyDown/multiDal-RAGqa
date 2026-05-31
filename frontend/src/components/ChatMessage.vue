@@ -15,6 +15,8 @@ import { computed } from 'vue'
 import { marked } from 'marked'
 import katex from 'katex'
 
+marked.use({ gfm: true })
+
 const props = defineProps({
   role: { type: String, required: true },
   content: { type: String, default: '' },
