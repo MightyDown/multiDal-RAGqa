@@ -41,6 +41,11 @@ class Settings(BaseSettings):
 
     # ── DB ────────────────────────────────────────────────
     db_path: str = Field(default=_cfg.get("db", {}).get("path", "data/multidal.db"))
+    mysql_host: str = Field(default=_cfg.get("db", {}).get("mysql_host", "localhost"))
+    mysql_port: int = Field(default=_cfg.get("db", {}).get("mysql_port", 3306), ge=1, le=65535)
+    mysql_user: str = Field(default=_cfg.get("db", {}).get("mysql_user", "root"))
+    mysql_password: str = Field(default=_cfg.get("db", {}).get("mysql_password", "mysql"))
+    mysql_database: str = Field(default=_cfg.get("db", {}).get("mysql_database", "multidal"))
 
     # ── Text Embedding ────────────────────────────────────
     text_embedding_api_base: str = Field(default=_cfg.get("text_embedding", {}).get("api_base", ""))

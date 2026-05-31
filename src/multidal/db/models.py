@@ -7,19 +7,22 @@ from src.multidal.config import settings
 
 Base = declarative_base()
 
+# Import session models so they're registered on Base before create_all()
+from src.multidal.agents.sessions import SessionModel, MessageModel  # noqa: F401
+
 
 class ParseTaskModel(Base):
     __tablename__ = "parse_tasks"
 
-    task_id = Column(String, primary_key=True)
-    filename = Column(String, nullable=False)
-    file_path = Column(String, default="")
+    task_id = Column(String(64), primary_key=True)
+    filename = Column(String(256), nullable=False)
+    file_path = Column(String(512), default="")
     file_size = Column(Integer, default=0)
     page_count = Column(Integer, default=0)
-    kb_id = Column(String, default="")
+    kb_id = Column(String(64), default="")
 
-    status = Column(String, default="pending")
-    stage = Column(String, nullable=True)
+    status = Column(String(32), default="pending")
+    stage = Column(String(64), nullable=True)
     error_message = Column(Text, default="")
     full_text = Column(Text, default="")
     retry_count = Column(Integer, default=0)
@@ -32,29 +35,22 @@ class ParseTaskModel(Base):
 class KnowledgeBaseModel(Base):
     __tablename__ = "knowledge_bases"
 
-    kb_id = Column(String, primary_key=True)
-    name = Column(String, nullable=False)
+    kb_id = Column(String(64), primary_key=True)
+    name = Column(String(256), nullable=False)
     description = Column(Text, default="")
-    text_collection = Column(String, nullable=False)
-    image_collection = Column(String, nullable=False)
+    text_collection = Column(String(128), nullable=False)
+    image_collection = Column(String(128), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 _engine = create_engine(
-    f"sqlite:///{settings.project_root / settings.db_path}",
-    connect_args={"check_same_thread": False},
+    f"mysql+pymysql://{settings.mysql_user}:{settings.mysql_password}@{settings.mysql_host}:{settings.mysql_port}/{settings.mysql_database}?charset=utf8mb4",
+    connect_args={"connect_timeout": 10},
     echo=False,
+    pool_pre_ping=True,
 )
 SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
 
 
 def init_db() -> None:
     Base.metadata.create_all(_engine)
-    # 兼容已有数据库：加 full_text 列
-    try:
-        from sqlalchemy import text
-        with _engine.connect() as conn:
-            conn.execute(text("ALTER TABLE parse_tasks ADD COLUMN full_text TEXT DEFAULT ''"))
-            conn.commit()
-    except Exception:
-        pass
