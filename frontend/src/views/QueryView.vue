@@ -231,6 +231,18 @@ async function loadChatHistory(sid) {
         return { role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content), sources: m.sources || [] }
       }
     })
+    // 自动命名：首个问答对加载完后触发小模型总结
+    if (messages.value.length >= 2) {
+      const session = sessions.value.find(s => s.session_id === sid)
+      if (session && !(session.session_name || '').trim()) {
+        try {
+          const result = await api('/sessions/' + sid, { method: 'PATCH' })
+          if (result.session_name) {
+            session.session_name = result.session_name
+          }
+        } catch {}
+      }
+    }
   } catch {
     messages.value = []
   }

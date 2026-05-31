@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, HTTPException
 
-from src.multidal.agents.sessions import delete_session, get_session, get_session_sources, list_sessions, set_session_sources
+from src.multidal.agents.sessions import delete_session, generate_session_name, get_session, get_session_sources, list_sessions, set_session_name
 
 router = APIRouter()
 
@@ -52,3 +54,42 @@ async def patch_last_message(session_id: str, body: dict):
     items[-1]["content"] = new_content
     await session.add_items([last])
     return {"ok": True}
+
+
+@router.patch("/sessions/{session_id}")
+async def rename_session(session_id: str, body: dict):
+    """自动命名会话：根据首个问答对生成会话主题。"""
+    session = get_session(session_id)
+    items = await session.get_items()
+    if not items:
+        raise HTTPException(status_code=404, detail="No messages in session")
+
+    user_msg = next((item for item in items if item.get("role") == "user"), None)
+    ai_msg = next((item for item in items if item.get("role") == "assistant"), None)
+
+    if not user_msg:
+        raise HTTPException(status_code=400, detail="No user message found")
+
+    user_content = user_msg.get("content", "")
+    # strip RAG prompt suffix if present
+    user_content = user_content.split("\n请基于以上文档内容回答")[0].strip()
+
+    ai_content = ""
+    if ai_msg:
+        raw = ai_msg.get("content", "")
+        try:
+            arr = json.loads(raw) if isinstance(raw, str) else raw
+            if isinstance(arr, list) and arr and isinstance(arr[0], dict) and arr[0].get("text"):
+                ai_content = "".join(item.get("text", "") for item in arr)
+            else:
+                ai_content = raw[:200]
+        except Exception:
+            ai_content = raw[:200]
+
+    try:
+        name = await generate_session_name(user_content, ai_content)
+        set_session_name(session_id, name)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to generate session name")
+
+    return {"ok": True, "session_name": name}

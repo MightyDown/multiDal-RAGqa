@@ -197,20 +197,26 @@ async def delete_session(session_id: str) -> None:
             db.commit()
 
 
-async def generate_session_name(question: str) -> str:
-    from src.multidal.agents.base import _get_chat_model
-    from agents import Agent, Runner
+async def generate_session_name(question: str, answer: str = "") -> str:
+    from src.multidal.agents.base import _get_small_agent
+    from agents import Runner
+
+    content = f"用户问题: {question}"
+    if answer:
+        content += f"\nAI回答: {answer[:200]}"
+    content += "\n\n请给这个对话起一个简短的名字（3-10个中文字符），只返回名称："
 
     try:
-        agent = Agent(
+        agent = _get_small_agent(
             name="Session Namer",
-            model=_get_chat_model(),
-            instructions="你是一个会话命名助手。根据用户的第一条问题，生成一个简短的会话名称（3-10个中文字符）。只返回名称本身，不要添加任何解释或标点。",
+            instructions="你是一个会话命名助手。根据对话内容，生成一个简短的会话名称（3-10个中文字符）。只返回名称本身，不要添加任何解释或标点。",
         )
-        result = await Runner.run(agent, f"用户问题: {question}\n\n请给这个对话起一个简短的名字：")
+        result = await Runner.run(agent, content)
         name = (result.final_output or "").strip()
+        # 移除思考标签
+        name = name.replace('<think>', '').replace('', '')
         name = name.replace('"', '').replace('"', '').replace('"', '').replace('《', '').replace('》', '')
-        return name[:20]
+        return name[:20].strip()
     except Exception:
         logger.warning("Failed to generate session name", exc_info=True)
         return question.strip()[:15] + ("..." if len(question) > 15 else "")
