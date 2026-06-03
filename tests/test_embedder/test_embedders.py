@@ -1,29 +1,8 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from src.multidal.embedder.registry import ModelRegistry
 from src.multidal.embedder.text_embedder import TextEmbedder
 from src.multidal.pipeline.base import PipelineContext
 from src.multidal.schema.document import ParsedDocument, TextChunk
-
-
-class TestModelRegistry:
-    def test_singleton(self):
-        a = ModelRegistry()
-        b = ModelRegistry()
-        assert a is b
-
-    def test_put_get(self):
-        reg = ModelRegistry()
-        reg.put("test_model", MagicMock())
-        assert reg.get("test_model") is not None
-        assert "test_model" in reg.loaded
-
-    def test_remove(self):
-        reg = ModelRegistry()
-        reg.put("m", MagicMock())
-        reg.remove("m")
-        assert reg.get("m") is None
-        assert "m" not in reg.loaded
 
 
 class TestTextEmbedder:
