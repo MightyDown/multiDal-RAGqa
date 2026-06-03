@@ -32,7 +32,15 @@
 | 前端 | Vue 3 + Vite | Markdown / LaTeX / Mermaid / SSE 流式 / 会话管理 |
 | 部署 | Docker Compose | 一键起 8 个服务 |
 
-完整架构与设计决策见 [DESIGN.md](./DESIGN.md),项目难点与评测方案见 [EVAL.md](./EVAL.md),面经叙述见 [INTERVIEW.md](./INTERVIEW.md)。
+## 问答展示
+
+**智能问答**(技术报告类) — 跨多模态解析、架构对比、数据指标召回,SSE 流式输出 + 原文截图作为参考来源:
+
+![智能问答页 — 多模态解析、架构对比、相关数据召回](Snipaste_2026-05-31_19-55-38.png)
+
+**智能写作**(设计文档类) — 同样形态的引用式回答,带原文配图 + 段落定位:
+
+![智能写作页 — 配图 + caption 召回,Markdown 渲染](Snipaste_2026-05-31_22-24-03.png)
 
 ## 快速开始
 
@@ -202,5 +210,3 @@ MySQL `agent_sessions` + `agent_messages` 表:
 1. **召回**:两条路径独立,合并去重
 2. **精排**:文本调 BCE rerank API 重打分,图片保留 CLIP 分(已在正确空间)
 3. **统一排序**:全部候选放一起按精排分降序,top-5 给 LLM
-
-详见 [docs/debug_image_retrieval.md](./docs/debug_image_retrieval.md)(一次"图片为什么搜不到"的复盘)。
