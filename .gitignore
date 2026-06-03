@@ -29,3 +29,6 @@ frontend/node_modules/
 .idea/
 .vscode/
 *.swp
+
+# Claude Code 本机配置(含本机路径与个人工作流允许列表)
+.claude/settings.local.json
