@@ -1,6 +1,7 @@
 # multiDal
 
 多模态 RAG 系统,面向企业文档智能。摄入 PDF(报告、扫描件、财报、设计稿),提取文本与视觉内容,构建跨模态向量数据库,通过 LLM 实现图文混合问答,支持多知识库隔离与会话记忆。
+演示视频：【多模态检索，私有化知识库搭建】 https://www.bilibili.com/video/BV15EVU6aEsk/?share_source=copy_web&vd_source=84d1efa37ba44daec192f0599e136d2e
 
 ## 架构一览
 
