@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 import requests
@@ -142,26 +143,54 @@ class Reranker:
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
-        r = requests.post(
-            f"{self._api_base}/sentence-similarity",
-            json={
-                "model": self._model,
-                "inputs": {
-                    "source_sentence": query,
-                    "sentences": docs,
+        # Moark sentence-similarity API 限制单次最多 25 条；
+        # 多 query 重写（最多 3 个子问题）会把候选堆到 ~30，超过限制就 400。
+        # 分批调用，最后把每批的分数按原 candidates 顺序拼接。
+        BATCH_SIZE = 25
+        all_scores: list[float] = []
+        for i in range(0, len(docs), BATCH_SIZE):
+            batch = docs[i : i + BATCH_SIZE]
+            r = requests.post(
+                f"{self._api_base}/sentence-similarity",
+                json={
+                    "model": self._model,
+                    "inputs": {
+                        "source_sentence": query,
+                        "sentences": batch,
+                    },
+                    "normalize": True,
                 },
-                "normalize": True,
-            },
-            headers=headers,
-            timeout=60,
-        )
-        r.raise_for_status()
-        data = r.json()
+                headers=headers,
+                timeout=60,
+            )
+            if not r.ok:
+                logger.error(
+                    "Reranker batch %d/%d failed: query=%s | response: %s",
+                    i // BATCH_SIZE + 1,
+                    (len(docs) + BATCH_SIZE - 1) // BATCH_SIZE,
+                    query[:120],
+                    r.text[:500],
+                )
+                raise requests.HTTPError(
+                    f"reranker batch failed status={r.status_code}"
+                )
+            batch_scores = self._parse_scores(r.json())
+            # 防御：分批返回的长度必须等于本批 candidates 数
+            if len(batch_scores) != len(batch):
+                logger.warning(
+                    "Reranker batch returned %d scores for %d docs, padding with 0",
+                    len(batch_scores), len(batch),
+                )
+                batch_scores = (batch_scores + [0.0] * len(batch))[: len(batch)]
+            all_scores.extend(batch_scores)
+        return all_scores
 
-        # 兼容多种返回结构,优先取 list[float] 直接返回
+    @staticmethod
+    def _parse_scores(data) -> list[float]:
+        """兼容多种 sentence-similarity 返回结构。"""
         if isinstance(data, list):
             if all(isinstance(x, (int, float)) for x in data):
-                return data
+                return list(data)
             if data and isinstance(data[0], dict):
                 return [it.get("score", it.get("relevance_score", 0.0)) for it in data]
         if isinstance(data, dict):
@@ -178,6 +207,6 @@ class Reranker:
                 items = sorted(data["results"], key=lambda x: x.get("index", 0))
                 return [it.get("relevance_score", it.get("score", 0.0)) for it in items]
 
-        # 未知格式:返回全 0,避免上层崩溃(此时会与图片候选同等竞争,基本等于随机)
+        # 未知格式:返回全 0，由上层做防御性 padding
         logger.warning("Reranker: unknown response format: %s", type(data))
-        return [0.0] * len(candidates)
+        return []

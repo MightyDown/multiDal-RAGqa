@@ -119,14 +119,25 @@ class TextEmbedder(Stage):
         Raises:
             requests.HTTPError: API 返回非 2xx 时。
         """
-        r = requests.post(
-            f"{self._api_base}/embeddings",
-            json={"model": self._model, "input": text},
-            headers={"Authorization": f"Bearer {self._key}", "Content-Type": "application/json"},
-            timeout=30,
-        )
-        r.raise_for_status()
-        return r.json()["data"][0]["embedding"]
+        # Moark API 在容器内偶发 30s+ 才建立连接，使用更长 timeout。
+        # 增加 retry 减少偶发 timeout 引起的整链路失败。
+        import time as _t
+        last_err = None
+        for attempt in range(3):
+            try:
+                r = requests.post(
+                    f"{self._api_base}/embeddings",
+                    json={"model": self._model, "input": text},
+                    headers={"Authorization": f"Bearer {self._key}", "Content-Type": "application/json"},
+                    timeout=(10, 60),  # connect 10s, read 60s
+                )
+                r.raise_for_status()
+                return r.json()["data"][0]["embedding"]
+            except Exception as e:
+                last_err = e
+                logger.warning("embed_query attempt %d failed: %s", attempt + 1, str(e)[:120])
+                _t.sleep(1 + attempt * 2)
+        raise last_err
 
     def _embed_batch(self, texts: list[str]) -> list[Embedding]:
         """将文本列表分批并发嵌入,按原顺序返回结果。

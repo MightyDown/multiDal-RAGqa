@@ -14,6 +14,7 @@ import os
 
 from agents import Agent, ModelSettings, set_default_openai_client
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
+from agents.tracing import set_tracing_disabled
 from openai import AsyncOpenAI
 
 from src.multidal.config import settings
@@ -22,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 # openai-agents SDK 要求设置此环境变量才能正常 import。
 os.environ.setdefault("OPENAI_API_KEY", settings.llm_api_key)
+
+# 关闭 Tracing：openai-agents 默认会把 span 异步上报到 platform.openai.com，
+# 容器内不可达，会触发 "Tracing: request failed: timed out" 并导致 Runner.run 抛 400。
+# 项目使用国内 MiniMax + Moark，无需 OpenAI 官方 trace。
+set_tracing_disabled(True)
 
 # 主对话 LLM 客户端与模型(全局单例)。
 _openai_client: AsyncOpenAI | None = None
@@ -133,6 +139,10 @@ class BaseAgent:
             name=name,
             model=_get_chat_model(),
             instructions=instructions,
+            # 关闭主 LLM 的思考链模式,确保回答直接落到 content 字段,
+            # 避免 reasoning_content 与 content 二选一导致前端收不到流式 delta。
+            # 与小模型 _get_small_agent 保持一致。
+            model_settings=ModelSettings(extra_body={"enable_thinking": False}),
         )
 
     @property

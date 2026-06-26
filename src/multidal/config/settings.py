@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     vl_caption_api_key: str = Field(default=_cfg.get("vl_caption", {}).get("api_key", ""))
     vl_caption_model: str = Field(default=_cfg.get("vl_caption", {}).get("model", ""))
 
+    # ── VLM (多模态问答) ─────────────────────────────────
+    vlm_api_base: str = Field(default=_cfg.get("vlm", {}).get("api_base", ""))
+    vlm_api_key: str = Field(default=_cfg.get("vlm", {}).get("api_key", ""))
+    vlm_model: str = Field(default=_cfg.get("vlm", {}).get("model", ""))
+    vlm_max_tokens: int = Field(default=_cfg.get("vlm", {}).get("max_tokens", 2048))
+    vlm_temperature: float = Field(default=_cfg.get("vlm", {}).get("temperature", 0.1))
+
     # ── LLM ───────────────────────────────────────────────
     llm_api_key: str = Field(default=_cfg.get("llm", {}).get("api_key", ""))
     llm_base_url: str = Field(default=_cfg.get("llm", {}).get("base_url", ""))
