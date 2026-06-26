@@ -5,15 +5,22 @@
 ## 架构一览
 
 ```
+上传:
 用户 → FastAPI → Kafka → Worker → MinerU(解析)
                                     ↓
                           TextEmbedder(BGE) + ImageEmbedder(Jina CLIP, 双路)
                                     ↓
                                 Milvus(双 Collection)
-                                   
+
+问答:
 用户 → FastAPI → KBRouterAgent(Qwen3-0.6B) → QueryRewriterAgent(Qwen3-0.6B)
                        ↓
-              双路召回(文本 + 图像) → BCE Reranker → QueryAgent(MiniMax-M2.7) → SSE
+              双路召回(文本 + 图像) → BCE Reranker
+                       ↓
+              ┌─ 有图片 → VLMAgent(MiniMax-M3, Vision 格式, base64 直传)
+              └─ 纯文本 → QueryAgent(MiniMax-M3, 文本 prompt)
+                       ↓
+                     SSE 流式输出
 ```
 
 | 组件 | 技术 | 用途 |
@@ -28,7 +35,7 @@
 | 消息队列 | Kafka | 异步解耦上传与处理 |
 | 状态存储 | MySQL | `parse_tasks` / `knowledge_bases` / `agent_sessions` / `agent_messages` |
 | Agent | openai-agents SDK | QA + 工具调用 + 会话记忆 |
-| LLM | MiniMax-M2.7 | `https://api.minimaxi.com/v1` |
+| LLM (QA) | MiniMax-M3 | `https://api.minimaxi.com/v1`，纯文本 + Vision 多模态合一 |
 | 前端 | Vue 3 + Vite | Markdown / LaTeX / Mermaid / SSE 流式 / 会话管理 |
 | 部署 | Docker Compose | 一键起 8 个服务 |
 
@@ -59,10 +66,16 @@ reranker:
   api_key: "your-moark-key"
 vl_caption:
   api_key: "your-moark-key"
+vlm:
+  api_base: "https://api.minimaxi.com/v1"
+  api_key: "your-minimaxi-key"
+  model: "MiniMax-M3"
+  max_tokens: 2048
+  temperature: 0.1
 llm:
   api_key: "your-minimaxi-key"
   base_url: "https://api.minimaxi.com/v1"
-  model: "MiniMax-M2.7"
+  model: "MiniMax-M3"
 small_llm:
   model: "Qwen3-0.6B"
 ```
@@ -197,6 +210,12 @@ MySQL `agent_sessions` + `agent_messages` 表:
 - `message_data` 存 LONGTEXT JSON(role / content / tool_calls)
 - `sources` 单独存 JSON 数组,**按 message 关联**,前端按消息展示"参考了哪些文档"
 - 首问答完 → `generate_session_name` 自动起名
+
+### VLM 多模态问答
+
+检索结果包含图片时，自动走 VLMAgent（也是 MiniMax-M3），以 OpenAI Vision 格式把图片 base64 直传模型，实现真正的"图文并茂"问答。无图片则走纯文本 QueryAgent。
+
+**降级原则**：VLM 调用失败时，丢弃图片候选，退回到纯文本 LLM 路径，保证问答不中断。
 
 ### 双路召回与精排
 
